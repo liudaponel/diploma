@@ -1,0 +1,2 @@
+сделать исполняемый файл с иконкой icon.ico:
+pyinstaller --onefile --noconsole --icon=icon.ico program.py
