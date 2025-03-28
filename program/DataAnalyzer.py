@@ -56,7 +56,7 @@ class DataAnalyzer:
         if self.check_values[7] == 1:
             self.calculate_pes_from_hours()
         if self.check_values[8] == 1:
-            self.calculate_PEs_avg_all_months()
+            self.calculate_PEs_months_years()
 
     def calculate_pes_from_year_and_cycle(self):
         query = """
@@ -319,17 +319,17 @@ class DataAnalyzer:
         WITH solar_avg AS (
             SELECT 
                 year_, 
-                AVG(f30) AS avg_f30  -- Среднегодовой индекс солнечной активности
+                AVG(f30) AS avg_f30
             FROM solar_activity
             GROUP BY year_
         )
         SELECT 
             d.year_,
-            AVG(CASE WHEN d.foes IS NOT NULL THEN 1.0 ELSE 0 END) AS avg_pes, -- Среднегодовая вероятность PEs
-            sa.avg_f30  -- Среднегодовой индекс солнечной активности
+            AVG(foes::numeric) AS avg_foes,
+            sa.avg_f30
         FROM data d
         LEFT JOIN solar_avg sa ON d.year_ = sa.year_
-        WHERE station = %s AND d.fmin IS NOT NULL
+        WHERE station = %s AND d.fmin IS NOT NULL AND foes IS NOT NULL
         GROUP BY d.year_, sa.avg_f30
         ORDER BY d.year_;"""
 
@@ -521,43 +521,46 @@ class DataAnalyzer:
         query = """
             WITH total_counts AS (
                 SELECT 
+                    year_,
                     (year_ - (SELECT MIN(year_) FROM data)) * 12 + month_ AS month_index,
                     hour_,
                     COUNT(*) AS total_count
                 FROM data
                 WHERE station = %s AND fmin IS NOT NULL
-                GROUP BY month_index, hour_
+                GROUP BY month_index, hour_, year_
             ),
             foEs_counts AS (
                 SELECT 
+                    year_,
                     (year_ - (SELECT MIN(year_) FROM data)) * 12 + month_ AS month_index,
                     hour_,
                     COUNT(*) AS foEs_count
                 FROM data
                 WHERE station = %s AND fmin IS NOT NULL AND foes IS NOT NULL
-                GROUP BY month_index, hour_
+                GROUP BY month_index, hour_, year_
             )
             SELECT 
+                t.year_,
                 t.month_index,
                 t.hour_,
                 COALESCE(f.foEs_count, 0) * 1.0 / NULLIF(t.total_count, 0) AS probability
             FROM total_counts t
             LEFT JOIN foEs_counts f 
             ON t.month_index = f.month_index AND t.hour_ = f.hour_
-            ORDER BY t.month_index, t.hour_;
+            ORDER BY t.month_index, t.hour_, t.year_;
             """
 
         # Выполняем запрос и загружаем данные в DataFrame
         self.cursor.execute(query, (self.station_code, self.station_code))
         rows = self.cursor.fetchall()
-        df = pd.DataFrame(rows, columns=["Номер месяца", "Час", "Вероятность"])
+        df = pd.DataFrame(rows, columns=["Год", "Номер месяца", "Время, UT", "Вероятность"])
         df["Вероятность"] = pd.to_numeric(df["Вероятность"], errors="coerce")
 
         # Выгрузка данных в Excel
-        self.uploadData(df, "PEs_hours")
+        self.uploadData(df, "PEs_months_hours")
 
         # Переводим данные в pivot-таблицу для heatmap
-        heatmap_data = df.pivot(index="Час", columns="Номер месяца", values="Вероятность")
+        heatmap_data = df.pivot(index="Время, UT", columns="Номер месяца", values="Вероятность")
 
         # Получаем список уникальных годов из базы данных
         query_years = "SELECT DISTINCT year_ FROM data ORDER BY year_;"
@@ -574,7 +577,7 @@ class DataAnalyzer:
 
         # Подписи осей
         plt.xlabel("Год", fontsize=14)
-        plt.ylabel("Час", fontsize=14)
+        plt.ylabel("Время, UT", fontsize=14)
         plt.title("Вероятность появления слоя по месяцам и часам", fontsize=16)
 
         # Устанавливаем реальные года на оси X
@@ -619,14 +622,14 @@ class DataAnalyzer:
         rows = self.cursor.fetchall()
 
         # Загружаем данные в DataFrame
-        df = pd.DataFrame(rows, columns=["Год", "Час", "Вероятность"])
+        df = pd.DataFrame(rows, columns=["Год", "Время, UT", "Вероятность"])
         df["Вероятность"] = pd.to_numeric(df["Вероятность"], errors="coerce")
 
         # Выгрузка данных в Excel
         self.uploadData(df, "PEs_years_hours")
 
         # Переводим в pivot-таблицу для heatmap
-        heatmap_data = df.pivot(index="Час", columns="Год", values="Вероятность")
+        heatmap_data = df.pivot(index="Время, UT", columns="Год", values="Вероятность")
 
         # Размер графика
         plt.figure(figsize=(16, 8))
@@ -636,7 +639,7 @@ class DataAnalyzer:
 
         # Настройка подписей осей
         plt.xlabel("Год", fontsize=14)
-        plt.ylabel("Час", fontsize=14)
+        plt.ylabel("Время, UT", fontsize=14)
         plt.title("Вероятность появления слоя по годам и часам", fontsize=16)
 
         # Переворачиваем ось Y (часы от 0 до 23 снизу вверх)
@@ -645,7 +648,7 @@ class DataAnalyzer:
         # Отображаем график
         plt.show()
 
-    def calculate_PEs_avg_all_months(self):
+    def calculate_PEs_months_years(self):
         query = """
             WITH total_counts AS (
                 SELECT 
@@ -683,7 +686,7 @@ class DataAnalyzer:
         df["Вероятность"] = pd.to_numeric(df["Вероятность"], errors="coerce")
 
         # Выгрузка данных в Excel
-        self.uploadData(df, "PEs_avg_all_months")
+        self.uploadData(df, "PEs_months_years")
 
         # Переводим в pivot-таблицу для heatmap
         heatmap_data = df.pivot(index="Месяц", columns="Год", values="Вероятность")

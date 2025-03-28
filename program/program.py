@@ -24,15 +24,9 @@ def start_analysis():
         analyzer = DataAnalyzer(check_values, code)
         analyzer.start()
 
-# def run_ml():
-#     messagebox.showinfo("нейронка")
-
 window = tk.Tk()
 window.title("Анализ спорадического слоя")
 window.geometry("600x450")
-
-# ml = tk.Button(window, text="Использовать нейронную сеть", command=run_ml)
-# ml.pack(pady=10)
 
 newDataButton = tk.Button(window, text="Добавить новые данные в базу", command=open_file_dialog)
 newDataButton.pack(pady=5)
@@ -88,6 +82,12 @@ window.mainloop()
 
 # + чета не так с высотами
 
-# написать нейронку
+# - написать нейронку
 
 # написать документацию для выбираемых пунктов и входных данных
+
+# + время, UT - подпись
+
+# + в 7 ячейку добавить столбец год в выгрузку данных
+
+# + неправильно считается foEsav от года и цикла СА - там случайно вероятность
